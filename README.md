@@ -31,7 +31,8 @@ x 8–15, both on rows y 0–7. The script samples the center of each square (4,
 | `fel`     | toxic green | `#00FF40` | Felwood                                     |
 | `plains`  | gold       | `#FFBF00` | Westfall, The Barrens, Mulgore               |
 | `desert`  | orange     | `#FF6600` | Durotar, Tanaris, Badlands                   |
-| `alliance`| alliance blue | `#0070DE` | Stormwind City, Ironforge, Darnassus      |
+| `alliance`| alliance blue | `#0070DE` | Stormwind City, Darnassus                 |
+| `ironforge`| forge bronze | `#B3590D` | Ironforge                                  |
 | `horde`   | horde red  | `#CC0000` | Orgrimmar, Thunder Bluff, Undercity          |
 | `default` | dark blue  | `#0040FF` | unknown zone                                 |
 | marker    | magenta    | `#FF00FF` | always                                       |

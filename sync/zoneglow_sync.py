@@ -98,6 +98,7 @@ ZONE_TYPES = {
     "desert":   (255, 102, 0),
     "alliance": (0, 112, 222),
     "horde":    (204, 0, 0),
+    "ironforge": (179, 89, 13),
     "default":  (0, 64, 255),
 }
 

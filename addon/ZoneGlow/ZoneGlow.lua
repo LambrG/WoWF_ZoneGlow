@@ -17,6 +17,7 @@ local PALETTE = {
     desert  = { 1.00, 0.40, 0.00 },  -- orange
     alliance = { 0.00, 0.44, 0.87 }, -- alliance blue (0070DE), Alliance cities
     horde   = { 0.80, 0.00, 0.00 },  -- horde red (CC0000), Horde cities
+    ironforge = { 0.70, 0.35, 0.05 }, -- forge bronze (B3590D), Ironforge
     default = { 0.00, 0.25, 1.00 },  -- dark blue (unknown zone)
 }
 
@@ -26,7 +27,7 @@ local PALETTE = {
 local ZONES = {
     -- Alliance cities
     ["Stormwind City"]      = "alliance",
-    ["Ironforge"]           = "alliance",
+    ["Ironforge"]           = "ironforge",
     ["Darnassus"]           = "alliance",
 
     -- Horde cities
@@ -103,6 +104,7 @@ local LOCALES = {
         types = {
             snow = "snow", forest = "forest", fel = "fel", plains = "plains",
             desert = "desert", alliance = "Alliance city", horde = "Horde city",
+            ironforge = "Ironforge",
             default = "default",
         },
     },
@@ -117,6 +119,7 @@ local LOCALES = {
         types = {
             snow = "snih", forest = "les", fel = "zkazeny les", plains = "plane",
             desert = "poust", alliance = "mesto Aliance", horde = "mesto Hordy",
+            ironforge = "Ironforge",
             default = "vychozi",
         },
     },

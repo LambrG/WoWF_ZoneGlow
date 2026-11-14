@@ -92,7 +92,8 @@ def color_close(a, b, tolerance: int = 3) -> bool:
 # Zone type colors drawn by the addon (PALETTE in ZoneGlow.lua, 0-1 values * 255).
 ZONE_TYPES = {
     "snow":     (0, 199, 255),
-    "forest":   (0, 255, 64),
+    "forest":   (77, 153, 15),
+    "fel":      (0, 255, 64),
     "plains":   (255, 191, 0),
     "desert":   (255, 102, 0),
     "alliance": (0, 112, 222),

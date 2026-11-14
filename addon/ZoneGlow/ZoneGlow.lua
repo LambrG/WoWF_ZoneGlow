@@ -11,7 +11,8 @@ local ADDON_NAME = ...
 ---------------------------------------------------------------------------
 local PALETTE = {
     snow    = { 0.00, 0.78, 1.00 },  -- icy blue (00C8FF)
-    forest  = { 0.00, 1.00, 0.25 },  -- green
+    forest  = { 0.30, 0.60, 0.06 },  -- grass green (4D990F), like the Elwynn map
+    fel     = { 0.00, 1.00, 0.25 },  -- toxic green (00FF40), Felwood
     plains  = { 1.00, 0.75, 0.00 },  -- gold
     desert  = { 1.00, 0.40, 0.00 },  -- orange
     alliance = { 0.00, 0.44, 0.87 }, -- alliance blue (0070DE), Alliance cities
@@ -50,7 +51,7 @@ local ZONES = {
     ["Teldrassil"]          = "forest",
     ["Darkshore"]           = "forest",
     ["Ashenvale"]           = "forest",
-    ["Felwood"]             = "forest",
+    ["Felwood"]             = "fel",
     ["Moonglade"]           = "forest",
     ["Azshara"]             = "forest",
     ["Feralas"]             = "forest",
@@ -100,7 +101,7 @@ local LOCALES = {
         help_status  = "/zoneglow - show the current zone and its type",
         help_lang    = "/zoneglow lang en|cs - set the language",
         types = {
-            snow = "snow", forest = "forest", plains = "plains",
+            snow = "snow", forest = "forest", fel = "fel", plains = "plains",
             desert = "desert", alliance = "Alliance city", horde = "Horde city",
             default = "default",
         },
@@ -114,7 +115,7 @@ local LOCALES = {
         help_status  = "/zoneglow - vypise aktualni zonu a jeji typ",
         help_lang    = "/zoneglow lang en|cs - nastavi jazyk",
         types = {
-            snow = "snih", forest = "les", plains = "plane",
+            snow = "snih", forest = "les", fel = "zkazeny les", plains = "plane",
             desert = "poust", alliance = "mesto Aliance", horde = "mesto Hordy",
             default = "vychozi",
         },

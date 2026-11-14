@@ -27,7 +27,8 @@ x 8–15, both on rows y 0–7. The script samples the center of each square (4,
 | Type      | Color      | Hex       | Example zones                                |
 |-----------|------------|-----------|----------------------------------------------|
 | `snow`    | icy blue   | `#00C8FF` | Dun Morogh, Winterspring                     |
-| `forest`  | green      | `#00FF40` | Elwynn Forest, Ashenvale, Stranglethorn Vale |
+| `forest`  | grass green | `#4D990F` | Elwynn Forest, Ashenvale, Stranglethorn Vale |
+| `fel`     | toxic green | `#00FF40` | Felwood                                     |
 | `plains`  | gold       | `#FFBF00` | Westfall, The Barrens, Mulgore               |
 | `desert`  | orange     | `#FF6600` | Durotar, Tanaris, Badlands                   |
 | `alliance`| alliance blue | `#0070DE` | Stormwind City, Ironforge, Darnassus      |

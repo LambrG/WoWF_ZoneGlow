@@ -29,7 +29,7 @@ v řádcích y 0–7. Skript čte střed čtverečků (4,4 a 12,4).
 | `forest` | zelená       | `#00FF40` | Elwynn Forest, Ashenvale, Stranglethorn Vale |
 | `plains` | zlatožlutá   | `#FFBF00` | Westfall, The Barrens, Mulgore        |
 | `desert` | oranžová     | `#FF6600` | Durotar, Tanaris, Badlands            |
-| `city`   | fialová      | `#A040FF` | Stormwind City, Orgrimmar             |
+| `city`   | fialová      | `#A140FF` | Stormwind City, Orgrimmar             |
 | `default`| tmavě modrá  | `#0040FF` | neznámá zóna                          |
 | marker   | magenta      | `#FF00FF` | vždy                                  |
 

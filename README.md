@@ -58,10 +58,24 @@ ln -s "$PWD/addon/ZoneGlow" \
 ## In-game usage
 
 - `/zoneglow` prints the current zone and its type.
+- `/zoneglow lang en|cs` switches the addon's chat messages between English
+  (default) and Czech. The choice is saved per account in `ZoneGlowDB`.
+- `/zoneglow help` lists the commands.
 - When the addon enters a zone it doesn't know, it prints the zone name to chat once
   and uses the `default` color. Add the zone to the `ZONES` table to map it.
 - The squares have no parent frame, so they stay visible when you hide the UI
   (Alt+Z).
+
+## Translations
+
+Chat messages are defined in the `LOCALES` table in
+[`ZoneGlow.lua`](addon/ZoneGlow/ZoneGlow.lua). To add a language, copy the `en`
+entry under a new key (for example `de`), translate the strings and update the
+`lang` usage hints. Avoid characters the default game fonts can't display. That's
+why the Czech strings have no diacritics.
+
+Translations only cover the addon's messages. Zone matching still uses the enUS
+zone names.
 
 ## Status
 

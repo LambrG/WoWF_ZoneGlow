@@ -1,7 +1,8 @@
 ## Interface: 16001
 ## Title: ZoneGlow
-## Notes: Vykresli v levem hornim rohu barevny pixel podle typu zony (pro synchronizaci RGB pres OpenRGB)
+## Notes: Draws a pixel in the top-left corner colored by zone type (for RGB sync via OpenRGB)
 ## Author: Lambr
-## Version: 0.1
+## Version: 0.2
+## SavedVariables: ZoneGlowDB
 
 ZoneGlow.lua

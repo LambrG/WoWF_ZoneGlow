@@ -1,26 +1,28 @@
--- ZoneGlow: vykresli v levem hornim rohu obrazovky dva ctverecky 8x8 px:
---   [MARKER (magenta)][BARVA ZONY]
--- Python skript cte barvu druheho ctverecku a posila ji do OpenRGB.
--- Marker slouzi skriptu jako kontrola, ze ctverecky jsou na obrazovce
--- (pri nacitaci obrazovce nebo mimo hru se barva neposle).
+-- ZoneGlow: draws two 8x8 px squares in the top-left corner of the screen:
+--   [MARKER (magenta)][ZONE COLOR]
+-- An external script reads the color of the second square and sends it to OpenRGB.
+-- The marker tells the script that the squares are on screen
+-- (no color is sent on loading screens or outside the game).
+
+local ADDON_NAME = ...
 
 ---------------------------------------------------------------------------
--- Barvy pro typy zon (R, G, B v rozsahu 0-1)
+-- Zone type colors (R, G, B in the 0-1 range)
 ---------------------------------------------------------------------------
 local PALETTE = {
-    snow    = { 0.00, 0.78, 1.00 },  -- ledove modra (00C8FF)
-    forest  = { 0.00, 1.00, 0.25 },  -- zelena
-    plains  = { 1.00, 0.75, 0.00 },  -- zlatozluta
-    desert  = { 1.00, 0.40, 0.00 },  -- oranzova
-    city    = { 0.63, 0.25, 1.00 },  -- fialova
-    default = { 0.00, 0.25, 1.00 },  -- tmave modra (neznama zona)
+    snow    = { 0.00, 0.78, 1.00 },  -- icy blue (00C8FF)
+    forest  = { 0.00, 1.00, 0.25 },  -- green
+    plains  = { 1.00, 0.75, 0.00 },  -- gold
+    desert  = { 1.00, 0.40, 0.00 },  -- orange
+    city    = { 0.63, 0.25, 1.00 },  -- purple
+    default = { 0.00, 0.25, 1.00 },  -- dark blue (unknown zone)
 }
 
 ---------------------------------------------------------------------------
--- Zona -> typ (nazvy pro enUS klienta, presne jak je vraci GetRealZoneText)
+-- Zone -> type (enUS client names, exactly as returned by GetRealZoneText)
 ---------------------------------------------------------------------------
 local ZONES = {
-    -- Mesta
+    -- Cities
     ["Stormwind City"]      = "city",
     ["Ironforge"]           = "city",
     ["Darnassus"]           = "city",
@@ -28,13 +30,13 @@ local ZONES = {
     ["Thunder Bluff"]       = "city",
     ["Undercity"]           = "city",
 
-    -- Snih
+    -- Snow
     ["Dun Morogh"]          = "snow",
     ["Winterspring"]        = "snow",
     ["Alterac Mountains"]   = "snow",
     ["Alterac Valley"]      = "snow",
 
-    -- Les / dzungle / bazina
+    -- Forest / jungle / swamp
     ["Elwynn Forest"]       = "forest",
     ["Duskwood"]            = "forest",
     ["Tirisfal Glades"]     = "forest",
@@ -53,7 +55,7 @@ local ZONES = {
     ["Dustwallow Marsh"]    = "forest",
     ["Stonetalon Mountains"] = "forest",
 
-    -- Plane / pastviny / kopce
+    -- Plains / grassland / hills
     ["Westfall"]            = "plains",
     ["Redridge Mountains"]  = "plains",
     ["Loch Modan"]          = "plains",
@@ -68,7 +70,7 @@ local ZONES = {
     ["The Barrens"]         = "plains",
     ["Warsong Gulch"]       = "plains",
 
-    -- Poust / vyprahla zeme
+    -- Desert / scorched land
     ["Durotar"]             = "desert",
     ["Badlands"]            = "desert",
     ["Searing Gorge"]       = "desert",
@@ -81,11 +83,55 @@ local ZONES = {
 }
 
 ---------------------------------------------------------------------------
--- Ctverecky
+-- Translations
+-- Czech is written without diacritics on purpose: the default game fonts
+-- do not contain characters such as e-caron or r-caron.
 ---------------------------------------------------------------------------
-local SIZE = 8  -- velikost jednoho ctverecku v pixelech
+local LOCALES = {
+    en = {
+        language     = "English",
+        unknown_zone = "unknown zone: |cffffff00%s|r",
+        status       = "%s -> %s",
+        lang_set     = "language set to %s",
+        lang_usage   = "usage: /zoneglow lang en|cs",
+        help_status  = "/zoneglow - show the current zone and its type",
+        help_lang    = "/zoneglow lang en|cs - set the language",
+        types = {
+            snow = "snow", forest = "forest", plains = "plains",
+            desert = "desert", city = "city", default = "default",
+        },
+    },
+    cs = {
+        language     = "cestina",
+        unknown_zone = "neznama zona: |cffffff00%s|r",
+        status       = "%s -> %s",
+        lang_set     = "jazyk nastaven: %s",
+        lang_usage   = "pouziti: /zoneglow lang en|cs",
+        help_status  = "/zoneglow - vypise aktualni zonu a jeji typ",
+        help_lang    = "/zoneglow lang en|cs - nastavi jazyk",
+        types = {
+            snow = "snih", forest = "les", plains = "plane",
+            desert = "poust", city = "mesto", default = "vychozi",
+        },
+    },
+}
+local DEFAULT_LANG = "en"
 
--- Bez rodice (nil), aby je neschovalo Alt+Z (skryti UI)
+local function L()
+    local lang = ZoneGlowDB and ZoneGlowDB.lang
+    return LOCALES[lang] or LOCALES[DEFAULT_LANG]
+end
+
+local function Print(key, ...)
+    print("|cff00c8ffZoneGlow|r: " .. string.format(L()[key], ...))
+end
+
+---------------------------------------------------------------------------
+-- Squares
+---------------------------------------------------------------------------
+local SIZE = 8  -- size of one square in pixels
+
+-- No parent (nil), so Alt+Z (hide UI) does not hide them
 local frame = CreateFrame("Frame", "ZoneGlowFrame", nil)
 frame:SetFrameStrata("TOOLTIP")
 frame:SetPoint("TOPLEFT", WorldFrame, "TOPLEFT", 0, 0)
@@ -100,7 +146,7 @@ local swatch = frame:CreateTexture(nil, "OVERLAY")
 swatch:SetPoint("TOPLEFT", marker, "TOPRIGHT", 0, 0)
 swatch:SetSize(SIZE, SIZE)
 
--- 1 jednotka UI = 1 fyzicky pixel (nezavisle na UI scale a rozliseni)
+-- 1 UI unit = 1 physical pixel (independent of UI scale and resolution)
 local function FixScale()
     local _, physH = GetPhysicalScreenSize()
     if physH and physH > 0 then
@@ -109,7 +155,7 @@ local function FixScale()
 end
 
 ---------------------------------------------------------------------------
--- Logika
+-- Logic
 ---------------------------------------------------------------------------
 local currentZone, currentType, lastUnknown = "", "default", nil
 
@@ -121,7 +167,7 @@ local function Update()
         zoneType = "default"
         if zone ~= "" and zone ~= lastUnknown then
             lastUnknown = zone
-            print("|cff00c8ffZoneGlow|r: neznama zona: |cffffff00" .. zone .. "|r")
+            Print("unknown_zone", zone)
         end
     end
 
@@ -130,25 +176,54 @@ local function Update()
     currentZone, currentType = zone, zoneType
 end
 
+frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 frame:RegisterEvent("DISPLAY_SIZE_CHANGED")
 frame:RegisterEvent("UI_SCALE_CHANGED")
 
-frame:SetScript("OnEvent", function(_, event)
+frame:SetScript("OnEvent", function(_, event, arg1)
+    if event == "ADDON_LOADED" then
+        if arg1 == ADDON_NAME then
+            ZoneGlowDB = ZoneGlowDB or {}
+            if not LOCALES[ZoneGlowDB.lang] then
+                ZoneGlowDB.lang = DEFAULT_LANG
+            end
+            frame:UnregisterEvent("ADDON_LOADED")
+        end
+        return
+    end
+
     if event == "DISPLAY_SIZE_CHANGED" or event == "UI_SCALE_CHANGED" or event == "PLAYER_ENTERING_WORLD" then
         FixScale()
     end
     Update()
-    -- Pri zmene zony muze GetRealZoneText chvili vracet starou zonu, proto jeste jednou
+    -- Right after a zone change GetRealZoneText may still return the old zone, so check again
     C_Timer.After(1, Update)
 end)
 
 ---------------------------------------------------------------------------
--- /zoneglow - vypise aktualni zonu a jeji typ
+-- Slash commands
+--   /zoneglow            - print the current zone and its type
+--   /zoneglow lang en|cs - set the language
+--   /zoneglow help       - list the commands
 ---------------------------------------------------------------------------
 SLASH_ZONEGLOW1 = "/zoneglow"
-SlashCmdList["ZONEGLOW"] = function()
-    Update()
-    print(string.format("|cff00c8ffZoneGlow|r: %s -> %s", currentZone, currentType))
+SlashCmdList["ZONEGLOW"] = function(msg)
+    local cmd, arg = strsplit(" ", strtrim(msg or ""):lower(), 2)
+
+    if cmd == "lang" then
+        if arg and LOCALES[arg] then
+            ZoneGlowDB.lang = arg
+            Print("lang_set", L().language)
+        else
+            Print("lang_usage")
+        end
+    elseif cmd == "help" then
+        Print("help_status")
+        Print("help_lang")
+    else
+        Update()
+        Print("status", currentZone, L().types[currentType] or currentType)
+    end
 end

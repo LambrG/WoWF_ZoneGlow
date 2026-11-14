@@ -205,10 +205,9 @@ def build_pipeline(fd: int, node_id: int, offset_x: int, offset_y: int):
     if src is None:
         raise RuntimeError("GStreamer element pipewiresrc is missing (PipeWire GStreamer plugin)")
     src.set_property("fd", fd)
-    if src.find_property("target-object"):
-        src.set_property("target-object", str(node_id))
-    else:
-        src.set_property("path", str(node_id))
+    # The portal gives a node id. "path" takes the id; its successor "target-object"
+    # only takes an object serial or name, so it can't be used here.
+    src.set_property("path", str(node_id))
 
     rest = Gst.parse_bin_from_description(
         f"videocrop left={offset_x} top={offset_y} right=-1 bottom=-1 "
@@ -552,8 +551,14 @@ def main() -> int:
     loop = GLib.MainLoop()
     lights = Lights(args.host, args.port, args.profile, args.dry_run)
     watcher = Watcher(args, lights, loop)
+    try:
+        gi.require_version("GLibUnix", "2.0")
+        from gi.repository import GLibUnix
+        signal_add = GLibUnix.signal_add
+    except (ValueError, ImportError):
+        signal_add = GLib.unix_signal_add
     for sig in (signal.SIGINT, signal.SIGTERM):
-        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, sig, lambda: (loop.quit(), False)[1])
+        signal_add(GLib.PRIORITY_DEFAULT, sig, lambda: (loop.quit(), False)[1])
 
     watcher.run()
     try:

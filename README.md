@@ -140,6 +140,6 @@ zone names.
 
 - [x] Addon: draws the marker and the zone color
 - [x] Kalimdor and Eastern Kingdoms zones mapped to types
-- [ ] Python script: screen capture through the PipeWire portal
-- [ ] Python script: sending the color to the OpenRGB SDK server
+- [x] Python script: screen capture through the PipeWire portal
+- [x] Python script: sending the color to the OpenRGB SDK server
 - [ ] Smooth color transitions between zones

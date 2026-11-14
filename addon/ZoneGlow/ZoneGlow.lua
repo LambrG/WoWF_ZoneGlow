@@ -14,7 +14,8 @@ local PALETTE = {
     forest  = { 0.00, 1.00, 0.25 },  -- green
     plains  = { 1.00, 0.75, 0.00 },  -- gold
     desert  = { 1.00, 0.40, 0.00 },  -- orange
-    city    = { 0.63, 0.25, 1.00 },  -- purple
+    alliance = { 0.00, 0.44, 0.87 }, -- alliance blue (0070DE), Alliance cities
+    horde   = { 0.80, 0.00, 0.00 },  -- horde red (CC0000), Horde cities
     default = { 0.00, 0.25, 1.00 },  -- dark blue (unknown zone)
 }
 
@@ -22,13 +23,15 @@ local PALETTE = {
 -- Zone -> type (enUS client names, exactly as returned by GetRealZoneText)
 ---------------------------------------------------------------------------
 local ZONES = {
-    -- Cities
-    ["Stormwind City"]      = "city",
-    ["Ironforge"]           = "city",
-    ["Darnassus"]           = "city",
-    ["Orgrimmar"]           = "city",
-    ["Thunder Bluff"]       = "city",
-    ["Undercity"]           = "city",
+    -- Alliance cities
+    ["Stormwind City"]      = "alliance",
+    ["Ironforge"]           = "alliance",
+    ["Darnassus"]           = "alliance",
+
+    -- Horde cities
+    ["Orgrimmar"]           = "horde",
+    ["Thunder Bluff"]       = "horde",
+    ["Undercity"]           = "horde",
 
     -- Snow
     ["Dun Morogh"]          = "snow",
@@ -98,7 +101,8 @@ local LOCALES = {
         help_lang    = "/zoneglow lang en|cs - set the language",
         types = {
             snow = "snow", forest = "forest", plains = "plains",
-            desert = "desert", city = "city", default = "default",
+            desert = "desert", alliance = "Alliance city", horde = "Horde city",
+            default = "default",
         },
     },
     cs = {
@@ -111,7 +115,8 @@ local LOCALES = {
         help_lang    = "/zoneglow lang en|cs - nastavi jazyk",
         types = {
             snow = "snih", forest = "les", plains = "plane",
-            desert = "poust", city = "mesto", default = "vychozi",
+            desert = "poust", alliance = "mesto Aliance", horde = "mesto Hordy",
+            default = "vychozi",
         },
     },
 }

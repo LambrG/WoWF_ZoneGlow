@@ -23,6 +23,7 @@ import secrets
 import signal
 import sys
 import time
+import tomllib
 from pathlib import Path
 
 import dbus
@@ -86,6 +87,94 @@ def read_zone_color(data: bytes, width: int, height: int):
 
 def color_close(a, b, tolerance: int = 3) -> bool:
     return a is not None and b is not None and all(abs(x - y) <= tolerance for x, y in zip(a, b))
+
+
+# Zone type colors drawn by the addon (PALETTE in ZoneGlow.lua, 0-1 values * 255).
+ZONE_TYPES = {
+    "snow":     (0, 199, 255),
+    "forest":   (0, 255, 64),
+    "plains":   (255, 191, 0),
+    "desert":   (255, 102, 0),
+    "alliance": (0, 112, 222),
+    "horde":    (204, 0, 0),
+    "default":  (0, 64, 255),
+}
+
+
+def zone_type(color, tolerance: int = 12):
+    """Name of the zone type whose addon color matches, or None."""
+    for name, ref in ZONE_TYPES.items():
+        if color_close(color, ref, tolerance):
+            return name
+    return None
+
+
+def parse_hex(value: str) -> tuple[int, int, int]:
+    v = value.strip().lstrip("#")
+    if len(v) != 6:
+        raise ValueError(f"expected a color like #RRGGBB, got {value!r}")
+    return tuple(int(v[i:i + 2], 16) for i in (0, 2, 4))
+
+
+class DeviceColors:
+    """Colors per device role and zone type, from a TOML file:
+
+        [roles]                    # part of the OpenRGB device name = role
+        Kingston = "secondary"     # devices not listed are "main"
+
+        [alliance]                 # zone type
+        main = "#0070DE"           # role = color
+        secondary = "#FFB000"
+
+    A role without a color in the zone's section gets the zone color from the
+    addon. The file is reloaded when it changes."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.mtime = None
+        self.roles: list[tuple[str, str]] = []                        # (device name part, role)
+        self.zones: dict[str, dict[str, tuple[int, int, int]]] = {}   # zone type -> role -> color
+        self.version = 0
+
+    def reload_if_changed(self) -> bool:
+        try:
+            mtime = self.path.stat().st_mtime
+        except FileNotFoundError:
+            mtime = None
+        if mtime == self.mtime:
+            return False
+        self.mtime = mtime
+        roles, zones = [], {}
+        if mtime is not None:
+            try:
+                with self.path.open("rb") as f:
+                    data = tomllib.load(f)
+                for section, values in data.items():
+                    if not isinstance(values, dict):
+                        raise ValueError(f"[{section}] must be a table")
+                    if section == "roles":
+                        roles = [(dev, str(role)) for dev, role in values.items()]
+                        continue
+                    if section not in ZONE_TYPES:
+                        log.warning("%s: unknown zone type [%s] (known: %s)",
+                                    self.path, section, ", ".join(ZONE_TYPES))
+                    zones[section] = {role: parse_hex(str(c)) for role, c in values.items()}
+            except (OSError, ValueError, tomllib.TOMLDecodeError) as e:
+                log.error("%s: %s (keeping the previous device colors)", self.path, e)
+                return False
+            log.info("loaded device colors from %s", self.path)
+        self.roles, self.zones = roles, zones
+        self.version += 1
+        return True
+
+    def role_of(self, device_name: str) -> str:
+        name = device_name.lower()
+        return next((role for part, role in self.roles if part.lower() in name), "main")
+
+    def color_for(self, device_name: str, ztype, zone_color):
+        """Color for one device in the given zone type."""
+        role_colors = self.zones.get(ztype, {}) if ztype else {}
+        return role_colors.get(self.role_of(device_name), zone_color)
 
 
 def hex_color(c) -> str:
@@ -292,7 +381,9 @@ class Lights:
         self.client = None
         self.next_try = time.monotonic() + self.RETRY_SECONDS
 
-    def set_color(self, color) -> bool:
+    def set_color(self, color, color_for=None) -> bool:
+        """Sets the zone color on every device. color_for(device_name) can return a
+        different color for some devices."""
         if self.dry_run:
             return True
         if not self._connect():
@@ -306,7 +397,8 @@ class Lights:
                         dev.set_mode("direct")
                 self.direct = True
             for dev in self.client.devices:
-                dev.set_color(RGBColor(*correct_color(color, dev.name, self.corrections)))
+                c = color_for(dev.name) if color_for else color
+                dev.set_color(RGBColor(*correct_color(c, dev.name, self.corrections)))
             return True
         except (OSError, ConnectionError, TimeoutError) as e:
             self._drop(e)
@@ -358,9 +450,11 @@ def game_running(names: set[str]) -> bool:
 class Capture:
     """One screen capture: started when the game starts, stopped when it exits."""
 
-    def __init__(self, args, lights: Lights, on_stopped):
+    def __init__(self, args, lights: Lights, device_colors: DeviceColors, on_stopped):
         self.args = args
         self.lights = lights
+        self.device_colors = device_colors
+        self.sent_version = None       # device colors version used for self.sent
         self.on_stopped = on_stopped   # called when capture ends on its own (error, sharing stopped)
         self.cast = None
         self.pipeline = None
@@ -446,11 +540,16 @@ class Capture:
         if not self.visible:
             log.info("marker visible")
             self.visible = True
-        if color_close(color, self.sent):
+        version = self.device_colors.version
+        if color_close(color, self.sent) and version == self.sent_version:
             return
-        if self.lights.set_color(color):
-            log.info("zone color %s", hex_color(color))
-            self.sent = color
+        ztype = zone_type(color)
+        dc = self.device_colors
+        if self.lights.set_color(color, lambda name: dc.color_for(name, ztype, color)):
+            roles = dc.zones.get(ztype, {}) if ztype else {}
+            extra = "".join(f", {role} {hex_color(c)}" for role, c in roles.items())
+            log.info("zone color %s (%s)%s", hex_color(color), ztype or "unknown type", extra)
+            self.sent, self.sent_version = color, version
 
 
 # ---------------------------------------------------------------------------
@@ -465,7 +564,9 @@ class Watcher:
         self.args = args
         self.lights = lights
         self.loop = loop
-        self.capture = Capture(args, lights, self._on_capture_stopped)
+        self.device_colors = DeviceColors(Path(args.config))
+        self.device_colors.reload_if_changed()
+        self.capture = Capture(args, lights, self.device_colors, self._on_capture_stopped)
         self.names = set(args.process)
         self.game = False
         self.suppressed = False   # user cancelled/stopped sharing: wait until the game restarts
@@ -484,6 +585,7 @@ class Watcher:
     def _check(self):
         if self.starting:
             return True
+        self.device_colors.reload_if_changed()  # Capture resends when the version changes
         game = self.args.always or game_running(self.names)
         if game != self.game:
             self.game = game
@@ -555,6 +657,8 @@ def parse_args():
     p.add_argument("--offset", type=int, nargs=2, default=(0, 0), metavar=("X", "Y"),
                    help="position of the game's top-left corner in the captured image (windowed mode)")
     p.add_argument("--reset", action="store_true", help="forget the saved monitor/window choice")
+    p.add_argument("--config", default=str(CONFIG_DIR / "config.toml"), metavar="FILE",
+                   help="per-device colors per zone type (default: %(default)s)")
     p.add_argument("--correct", type=parse_correction, action="append", default=[], metavar="DEVICE=R,G,B",
                    help="per-device color gains, DEVICE is part of the OpenRGB device name, "
                         "e.g. --correct ASUS=1,0.5,1 (can be repeated)")

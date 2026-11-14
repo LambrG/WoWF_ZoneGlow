@@ -1,0 +1,19 @@
+# ZoneGlow: colors per device role and zone type.
+# Copy to ~/.config/zoneglow/config.toml. Changes are picked up within a few seconds.
+
+# Device roles. Key = part of the OpenRGB device name (case-insensitive).
+# Devices not listed here are "main".
+[roles]
+Kingston = "secondary"
+
+# Zone sections: snow, forest, plains, desert, alliance, horde, default.
+# Value = role color "#RRGGBB". A role without a color gets the zone color from the addon.
+
+# Alliance cities: blue main (fans, keyboard), gold secondary (RAM)
+[alliance]
+main = "#0070DE"
+secondary = "#FFB000"
+
+# Horde cities: red main, dark gold secondary
+# [horde]
+# secondary = "#B07000"

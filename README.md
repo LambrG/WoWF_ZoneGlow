@@ -30,7 +30,8 @@ x 8–15, both on rows y 0–7. The script samples the center of each square (4,
 | `forest`  | green      | `#00FF40` | Elwynn Forest, Ashenvale, Stranglethorn Vale |
 | `plains`  | gold       | `#FFBF00` | Westfall, The Barrens, Mulgore               |
 | `desert`  | orange     | `#FF6600` | Durotar, Tanaris, Badlands                   |
-| `city`    | purple     | `#A140FF` | Stormwind City, Orgrimmar                    |
+| `alliance`| alliance blue | `#0070DE` | Stormwind City, Ironforge, Darnassus      |
+| `horde`   | horde red  | `#CC0000` | Orgrimmar, Thunder Bluff, Undercity          |
 | `default` | dark blue  | `#0040FF` | unknown zone                                 |
 | marker    | magenta    | `#FF00FF` | always                                       |
 
@@ -117,6 +118,7 @@ the script won't ask again until the game is restarted.
 | `--source monitor\|window` | `monitor` | Capture a whole monitor or only the game window |
 | `--offset X Y` | `0 0` | Position of the game's top-left corner in the capture (windowed game on a captured monitor) |
 | `--reset` | | Forget the saved monitor/window choice |
+| `--config FILE` | `~/.config/zoneglow/config.toml` | Colors per device role and zone type, see below |
 | `--correct DEVICE=R,G,B` | | Per-device channel gains, `DEVICE` is part of the OpenRGB device name (e.g. `--correct ASUS=1,0.5,1`). Can be repeated |
 | `--dry-run` | | Print colors only |
 
@@ -129,6 +131,26 @@ fast. Only a 64×32 px corner of the screen is converted, so CPU use doesn't dep
 on the screen resolution. The squares can be scaled up to 4× (e.g. when the
 compositor upscales the game). The script measures the marker and reads the middle
 of both squares.
+
+### Device roles
+
+By default every device shows the zone color. A config file can split devices into
+roles and give each role its own color per zone type. For example, Alliance cities
+can have blue fans and gold RAM:
+
+```toml
+# ~/.config/zoneglow/config.toml
+[roles]
+Kingston = "secondary"    # part of the OpenRGB device name; unlisted devices are "main"
+
+[alliance]
+main = "#0070DE"
+secondary = "#FFB000"
+```
+
+A role without a color in a zone's section gets the zone color from the addon. The
+script picks up changes within a few seconds. See
+[`sync/config.example.toml`](sync/config.example.toml).
 
 ## Translations
 

@@ -11,7 +11,7 @@ Kingston = "secondary"
 
 # Alliance cities: blue main (fans, keyboard), gold secondary (RAM)
 [alliance]
-main = "#0070DE"
+main = "#0030FF"
 secondary = "#FFB000"
 
 # Horde cities: red main, dark gold secondary

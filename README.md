@@ -144,7 +144,7 @@ can have blue fans and gold RAM:
 Kingston = "secondary"    # part of the OpenRGB device name; unlisted devices are "main"
 
 [alliance]
-main = "#0070DE"
+main = "#0030FF"
 secondary = "#FFB000"
 ```
 

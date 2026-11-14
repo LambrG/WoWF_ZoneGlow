@@ -11,7 +11,7 @@ WoW addon ──► 2 pixels in the screen corner ──► Python script (PipeW
 
 1. **The addon** (`addon/ZoneGlow`) draws two 8×8 px squares in the top-left corner
    of the screen: `[magenta marker][zone type color]`.
-2. **A Python script** (work in progress) captures the screen through the PipeWire
+2. **A Python script** (`sync/zoneglow_sync.py`) captures the screen through the PipeWire
    screencast portal (Wayland/KDE), reads the color of the second square and sends
    it to OpenRGB through its SDK server (`openrgb-python`).
 3. The color is sent only while the magenta marker is visible. Loading screens,
@@ -65,6 +65,52 @@ ln -s "$PWD/addon/ZoneGlow" \
   and uses the `default` color. Add the zone to the `ZONES` table to map it.
 - The squares have no parent frame, so they stay visible when you hide the UI
   (Alt+Z).
+
+## Running the sync script
+
+Requirements (Ubuntu package names):
+
+- Wayland session with xdg-desktop-portal (tested on KDE Plasma)
+- `python3-gi`, `python3-dbus`, GStreamer with the PipeWire plugin
+  (`gstreamer1.0-pipewire`) and `gstreamer1.0-plugins-good` (videocrop)
+- [OpenRGB](https://openrgb.org) with the SDK server running
+  (SDK Server tab → Start Server, or start OpenRGB with `--server`)
+
+Setup:
+
+```bash
+python3 -m venv --system-site-packages .venv
+.venv/bin/pip install -r sync/requirements.txt
+```
+
+Run:
+
+```bash
+./run.sh                          # all OpenRGB devices follow the zone color
+./run.sh --profile "my profile"   # load this OpenRGB profile when the game is gone and on exit
+./run.sh --dry-run                # only print the colors, don't touch OpenRGB
+```
+
+On the first run, the desktop asks which monitor to share. Pick the one with the
+game. The choice is remembered (`~/.config/zoneglow/`), use `--reset` to choose
+again.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--host`, `--port` | `127.0.0.1`, `6742` | OpenRGB SDK server |
+| `--profile NAME` | none | OpenRGB profile loaded when the marker has been gone for `--idle` seconds, and on exit |
+| `--idle SECONDS` | `10` | How long the marker must be gone before `--profile` is loaded |
+| `--fps N` | `10` | Checks per second |
+| `--source monitor\|window` | `monitor` | Capture a whole monitor or only the game window |
+| `--offset X Y` | `0 0` | Position of the game's top-left corner in the capture (windowed game on a captured monitor) |
+| `--reset` | | Forget the saved monitor/window choice |
+| `--dry-run` | | Print colors only |
+
+The script switches devices that have a Direct mode to it, so color updates are
+fast. Only a 64×32 px corner of the screen is converted, so CPU use doesn't depend
+on the screen resolution. The squares can be scaled up to 4× (e.g. when the
+compositor upscales the game). The script measures the marker and reads the middle
+of both squares.
 
 ## Translations
 

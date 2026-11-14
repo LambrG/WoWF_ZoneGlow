@@ -227,14 +227,39 @@ def build_pipeline(fd: int, node_id: int, offset_x: int, offset_y: int):
 # OpenRGB
 # ---------------------------------------------------------------------------
 
+def correct_color(color, device_name: str, corrections) -> tuple[int, int, int]:
+    """Applies per-channel gains of the first correction whose name is contained in
+    the device name (case-insensitive). LEDs differ: e.g. case fans often show a
+    stronger green, so the same RGB value looks whiter than on RAM."""
+    name = device_name.lower()
+    for match, gains in corrections:
+        if match.lower() in name:
+            return tuple(max(0, min(255, round(c * g))) for c, g in zip(color, gains))
+    return tuple(color)
+
+
+def parse_correction(value: str):
+    """'ASUS=1,0.5,1' -> ('ASUS', (1.0, 0.5, 1.0))"""
+    name, sep, gains = value.rpartition("=")
+    parts = gains.split(",")
+    if not sep or not name or len(parts) != 3:
+        raise argparse.ArgumentTypeError("expected DEVICE=R,G,B, e.g. ASUS=1,0.5,1")
+    try:
+        return name, tuple(float(x) for x in parts)
+    except ValueError:
+        raise argparse.ArgumentTypeError("R,G,B gains must be numbers, e.g. 1,0.5,1") from None
+
+
 class Lights:
     """Sends colors to every device on the OpenRGB SDK server. Reconnects when the
     server goes away and can load a profile when the game exits."""
 
     RETRY_SECONDS = 5
 
-    def __init__(self, host: str, port: int, profile: str | None, dry_run: bool):
+    def __init__(self, host: str, port: int, profile: str | None, dry_run: bool,
+                 corrections: list[tuple[str, tuple[float, float, float]]] = ()):
         self.host, self.port, self.profile, self.dry_run = host, port, profile, dry_run
+        self.corrections = corrections
         self.client = None
         self.direct = False   # devices switched to Direct mode
         self.next_try = 0.0
@@ -280,9 +305,8 @@ class Lights:
                     if any(m.name.lower() == "direct" for m in dev.modes):
                         dev.set_mode("direct")
                 self.direct = True
-            rgb = RGBColor(*color)
             for dev in self.client.devices:
-                dev.set_color(rgb)
+                dev.set_color(RGBColor(*correct_color(color, dev.name, self.corrections)))
             return True
         except (OSError, ConnectionError, TimeoutError) as e:
             self._drop(e)
@@ -531,6 +555,9 @@ def parse_args():
     p.add_argument("--offset", type=int, nargs=2, default=(0, 0), metavar=("X", "Y"),
                    help="position of the game's top-left corner in the captured image (windowed mode)")
     p.add_argument("--reset", action="store_true", help="forget the saved monitor/window choice")
+    p.add_argument("--correct", type=parse_correction, action="append", default=[], metavar="DEVICE=R,G,B",
+                   help="per-device color gains, DEVICE is part of the OpenRGB device name, "
+                        "e.g. --correct ASUS=1,0.5,1 (can be repeated)")
     p.add_argument("--dry-run", action="store_true", help="only print colors, do not touch OpenRGB")
     p.add_argument("-v", "--verbose", action="store_true")
     return p.parse_args()
@@ -549,7 +576,7 @@ def main() -> int:
         log.info("dry run: colors are only printed")
 
     loop = GLib.MainLoop()
-    lights = Lights(args.host, args.port, args.profile, args.dry_run)
+    lights = Lights(args.host, args.port, args.profile, args.dry_run, args.correct)
     watcher = Watcher(args, lights, loop)
     try:
         gi.require_version("GLibUnix", "2.0")

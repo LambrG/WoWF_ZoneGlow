@@ -117,7 +117,12 @@ the script won't ask again until the game is restarted.
 | `--source monitor\|window` | `monitor` | Capture a whole monitor or only the game window |
 | `--offset X Y` | `0 0` | Position of the game's top-left corner in the capture (windowed game on a captured monitor) |
 | `--reset` | | Forget the saved monitor/window choice |
+| `--correct DEVICE=R,G,B` | | Per-device channel gains, `DEVICE` is part of the OpenRGB device name (e.g. `--correct ASUS=1,0.5,1`). Can be repeated |
 | `--dry-run` | | Print colors only |
+
+Different LEDs show the same RGB value differently. For example, case fans often
+have a stronger green and look whiter than RAM. Use `--correct` to tune a device
+until it matches the others.
 
 The script switches devices that have a Direct mode to it, so color updates are
 fast. Only a 64×32 px corner of the screen is converted, so CPU use doesn't depend

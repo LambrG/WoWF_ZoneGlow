@@ -8,6 +8,10 @@ xdg-desktop-portal ScreenCast interface (Wayland), reads both squares and sends 
 zone color to every device on the OpenRGB SDK server. Nothing is sent while the
 marker is not visible (loading screens, menus, alt-tab).
 
+The script waits for the game process (Wow.exe): capture starts when the game starts
+and stops when it exits, then an optional OpenRGB profile is loaded. It is meant to
+run all the time, e.g. as a systemd user service (see install-service.sh).
+
 Requirements (system packages): python3-gi, python3-dbus, GStreamer with the
 PipeWire plugin (pipewiresrc). Python package: openrgb-python.
 """
@@ -226,7 +230,7 @@ def build_pipeline(fd: int, node_id: int, offset_x: int, offset_y: int):
 
 class Lights:
     """Sends colors to every device on the OpenRGB SDK server. Reconnects when the
-    server goes away and can load a profile when the game is not visible."""
+    server goes away and can load a profile when the game exits."""
 
     RETRY_SECONDS = 5
 
@@ -309,28 +313,96 @@ class Lights:
 
 
 # ---------------------------------------------------------------------------
-# Main loop
+# Game process
 # ---------------------------------------------------------------------------
 
-class Sync:
-    def __init__(self, sink, lights: Lights, idle_seconds: float):
-        self.sink = sink
-        self.lights = lights
-        self.idle_seconds = idle_seconds
-        self.sent = None             # last color sent to OpenRGB
-        self.visible = False
-        self.last_seen = time.monotonic()
-        self.idle = False            # idle profile loaded
+def game_running(names: set[str]) -> bool:
+    """True when a process with one of the names is running (Wine keeps the Windows
+    executable name, e.g. Wow.exe, as the process name)."""
+    for comm in Path("/proc").glob("[0-9]*/comm"):
+        try:
+            if comm.read_text().strip() in names:
+                return True
+        except OSError:
+            pass  # process exited meanwhile
+    return False
 
-    def tick(self):
-        sample = self.sink.emit("try-pull-sample", 0)
+
+# ---------------------------------------------------------------------------
+# Capture session: portal + pipeline + reading colors
+# ---------------------------------------------------------------------------
+
+class Capture:
+    """One screen capture: started when the game starts, stopped when it exits."""
+
+    def __init__(self, args, lights: Lights, on_stopped):
+        self.args = args
+        self.lights = lights
+        self.on_stopped = on_stopped   # called when capture ends on its own (error, sharing stopped)
+        self.cast = None
+        self.pipeline = None
+        self.sink = None
+        self.timer = None
+        self.sent = None               # last color sent to OpenRGB
+        self.visible = False
+
+    def start(self):
+        """Raises PortalError / dbus.DBusException / RuntimeError on failure."""
+        token_file = CONFIG_DIR / f"restore_token_{self.args.source}"
+        self.cast = ScreenCast(dbus.SessionBus(), self.args.source, token_file)
+        try:
+            fd, node_id = self.cast.start()
+            self.pipeline, self.sink = build_pipeline(fd, node_id, *self.args.offset)
+        except Exception:
+            self.cast.close()
+            self.cast = None
+            raise
+        log.info("capturing PipeWire node %d", node_id)
+
+        gst_bus = self.pipeline.get_bus()
+        gst_bus.add_signal_watch()
+        gst_bus.connect("message", self._on_bus_message)
+        self.cast.on_closed(lambda: self._stop_self("screen sharing was stopped"))
+
+        self.sent, self.visible = None, False
+        self.timer = GLib.timeout_add(max(1, int(1000 / self.args.fps)), self._tick)
+        self.pipeline.set_state(Gst.State.PLAYING)
+
+    def stop(self):
+        if self.timer:
+            GLib.source_remove(self.timer)
+            self.timer = None
+        if self.pipeline:
+            self.pipeline.get_bus().remove_signal_watch()
+            self.pipeline.set_state(Gst.State.NULL)
+            self.pipeline = self.sink = None
+        if self.cast:
+            self.cast.close()
+            self.cast = None
+
+    @property
+    def active(self) -> bool:
+        return self.pipeline is not None
+
+    def _stop_self(self, reason: str, user_stopped: bool = True):
+        if not self.active:
+            return
+        log.info("%s", reason)
+        self.stop()
+        self.on_stopped(user_stopped)
+
+    def _on_bus_message(self, _bus, msg):
+        if msg.type == Gst.MessageType.ERROR:
+            err, debug = msg.parse_error()
+            log.error("GStreamer: %s (%s)", err.message, debug)
+            self._stop_self("capture failed", user_stopped=False)
+        elif msg.type == Gst.MessageType.EOS:
+            self._stop_self("stream ended", user_stopped=False)
+
+    def _tick(self):
+        sample = self.sink.emit("try-pull-sample", 0) if self.sink else None
         if sample is not None:
             self._process(sample)
-        if (not self.idle and self.lights.profile
-                and time.monotonic() - self.last_seen > self.idle_seconds):
-            if self.lights.load_profile():
-                self.idle = True
-                self.sent = None
         return True  # keep the GLib timer running
 
     def _process(self, sample):
@@ -351,22 +423,109 @@ class Sync:
         if not self.visible:
             log.info("marker visible")
             self.visible = True
-        self.last_seen = time.monotonic()
         if color_close(color, self.sent):
             return
         if self.lights.set_color(color):
             log.info("zone color %s", hex_color(color))
             self.sent = color
-            self.idle = False
+
+
+# ---------------------------------------------------------------------------
+# Watcher: starts and stops the capture with the game
+# ---------------------------------------------------------------------------
+
+class Watcher:
+    WATCH_SECONDS = 3
+    RETRY_SECONDS = 30   # after a capture error while the game keeps running
+
+    def __init__(self, args, lights: Lights, loop: GLib.MainLoop):
+        self.args = args
+        self.lights = lights
+        self.loop = loop
+        self.capture = Capture(args, lights, self._on_capture_stopped)
+        self.names = set(args.process)
+        self.game = False
+        self.suppressed = False   # user cancelled/stopped sharing: wait until the game restarts
+        self.retry_at = 0.0
+        self.restore_pending = False  # profile still has to be loaded (OpenRGB was down)
+        self.starting = False         # portal dialog open (nested main loop), don't start twice
+
+    def run(self):
+        if self.args.always:
+            log.info("capturing without waiting for the game")
+        else:
+            log.info("waiting for %s", ", ".join(sorted(self.names)))
+        self._check()
+        GLib.timeout_add_seconds(self.WATCH_SECONDS, self._check)
+
+    def _check(self):
+        if self.starting:
+            return True
+        game = self.args.always or game_running(self.names)
+        if game != self.game:
+            self.game = game
+            if game:
+                log.info("game started")
+            else:
+                log.info("game exited")
+                self.suppressed = False
+                self.retry_at = 0.0
+                if self.capture.active:
+                    self.capture.stop()
+                self.restore_pending = True
+
+        if self.restore_pending and self.lights.load_profile():
+            self.restore_pending = False
+
+        if (self.game and not self.capture.active and not self.suppressed
+                and time.monotonic() >= self.retry_at):
+            self._start_capture()
+        return True
+
+    def _start_capture(self):
+        self.starting = True
+        try:
+            self.capture.start()
+            self.restore_pending = False
+        except PortalError as e:
+            if self.args.always:
+                log.error("screen capture: %s", e)
+                self.loop.quit()
+                return
+            log.warning("screen capture: %s. Not retrying until the game is restarted.", e)
+            self.suppressed = True
+        except (dbus.DBusException, RuntimeError) as e:
+            log.error("screen capture failed: %s. Retrying in %ds.", e, self.RETRY_SECONDS)
+            self.retry_at = time.monotonic() + self.RETRY_SECONDS
+        finally:
+            self.starting = False
+
+    def _on_capture_stopped(self, user_stopped: bool):
+        if self.args.always:
+            self.loop.quit()
+            return
+        if user_stopped:
+            log.info("not capturing again until the game is restarted")
+            self.suppressed = True
+        else:
+            self.retry_at = time.monotonic() + self.RETRY_SECONDS
+        self.restore_pending = True
+
+    def shutdown(self):
+        self.capture.stop()
+        self.lights.load_profile()
+        self.lights.close()
 
 
 def parse_args():
     p = argparse.ArgumentParser(description="Sync OpenRGB lighting with the ZoneGlow WoW addon.")
     p.add_argument("--host", default="127.0.0.1", help="OpenRGB SDK server host (default: %(default)s)")
     p.add_argument("--port", type=int, default=6742, help="OpenRGB SDK server port (default: %(default)s)")
-    p.add_argument("--profile", help="OpenRGB profile to load when the game is not visible and on exit")
-    p.add_argument("--idle", type=float, default=10, metavar="SECONDS",
-                   help="load --profile after the marker is gone this long (default: %(default)s)")
+    p.add_argument("--profile", help="OpenRGB profile to load when the game exits and when the script stops")
+    p.add_argument("--process", nargs="+", default=["Wow.exe"], metavar="NAME",
+                   help="game process names to wait for (default: %(default)s)")
+    p.add_argument("--always", action="store_true",
+                   help="capture right away instead of waiting for the game; exit when capture stops")
     p.add_argument("--fps", type=float, default=10, help="checks per second (default: %(default)s)")
     p.add_argument("--source", choices=SOURCE_TYPES, default="monitor",
                    help="capture a whole monitor or just the game window (default: %(default)s)")
@@ -385,60 +544,23 @@ def main() -> int:
 
     DBusGMainLoop(set_as_default=True)
     Gst.init(None)
-
-    token_file = CONFIG_DIR / f"restore_token_{args.source}"
     if args.reset:
-        token_file.unlink(missing_ok=True)
+        (CONFIG_DIR / f"restore_token_{args.source}").unlink(missing_ok=True)
+    if args.dry_run:
+        log.info("dry run: colors are only printed")
 
-    cast = ScreenCast(dbus.SessionBus(), args.source, token_file)
-    try:
-        fd, node_id = cast.start()
-    except (PortalError, dbus.DBusException) as e:
-        log.error("screen capture failed: %s", e)
-        return 1
-    log.info("capturing PipeWire node %d", node_id)
-
-    pipeline, sink = build_pipeline(fd, node_id, *args.offset)
-    lights = Lights(args.host, args.port, args.profile, args.dry_run)
-    sync = Sync(sink, lights, args.idle)
     loop = GLib.MainLoop()
-    exit_code = 0
-
-    def on_bus_message(_bus, msg):
-        nonlocal exit_code
-        if msg.type == Gst.MessageType.ERROR:
-            err, debug = msg.parse_error()
-            log.error("GStreamer: %s (%s)", err.message, debug)
-            exit_code = 1
-            loop.quit()
-        elif msg.type == Gst.MessageType.EOS:
-            log.info("stream ended")
-            loop.quit()
-
-    gst_bus = pipeline.get_bus()
-    gst_bus.add_signal_watch()
-    gst_bus.connect("message", on_bus_message)
-
-    def on_portal_closed():
-        log.info("screen sharing was stopped")
-        loop.quit()
-
-    cast.on_closed(on_portal_closed)
+    lights = Lights(args.host, args.port, args.profile, args.dry_run)
+    watcher = Watcher(args, lights, loop)
     for sig in (signal.SIGINT, signal.SIGTERM):
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, sig, lambda: (loop.quit(), False)[1])
 
-    GLib.timeout_add(max(1, int(1000 / args.fps)), sync.tick)
-    pipeline.set_state(Gst.State.PLAYING)
-    if args.dry_run:
-        log.info("dry run: colors are only printed")
+    watcher.run()
     try:
         loop.run()
     finally:
-        pipeline.set_state(Gst.State.NULL)
-        cast.close()
-        lights.load_profile()
-        lights.close()
-    return exit_code
+        watcher.shutdown()
+    return 0
 
 
 if __name__ == "__main__":

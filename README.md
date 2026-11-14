@@ -83,23 +83,36 @@ python3 -m venv --system-site-packages .venv
 .venv/bin/pip install -r sync/requirements.txt
 ```
 
-Run:
+The script is meant to run all the time. It waits for the game process (`Wow.exe`)
+and only captures the screen while the game is running. When the game exits, capture
+stops and the `--profile` you choose is loaded.
+
+Start it with the desktop session (systemd user service):
 
 ```bash
-./run.sh                          # all OpenRGB devices follow the zone color
-./run.sh --profile "my profile"   # load this OpenRGB profile when the game is gone and on exit
-./run.sh --dry-run                # only print the colors, don't touch OpenRGB
+./install-service.sh --profile "my profile"   # install, enable and start
+journalctl --user -u zoneglow -f              # logs
+./install-service.sh --uninstall              # remove
 ```
 
-On the first run, the desktop asks which monitor to share. Pick the one with the
-game. The choice is remembered (`~/.config/zoneglow/`), use `--reset` to choose
-again.
+Or run it by hand:
+
+```bash
+./run.sh --profile "my profile"
+./run.sh --dry-run --always       # test: capture right away, only print the colors
+```
+
+When the game starts for the first time, the desktop asks which monitor to share.
+Pick the one with the game. The choice is remembered (`~/.config/zoneglow/`), use
+`--reset` to choose again. If you cancel the dialog or stop sharing from the tray,
+the script won't ask again until the game is restarted.
 
 | Option | Default | Meaning |
 |---|---|---|
 | `--host`, `--port` | `127.0.0.1`, `6742` | OpenRGB SDK server |
-| `--profile NAME` | none | OpenRGB profile loaded when the marker has been gone for `--idle` seconds, and on exit |
-| `--idle SECONDS` | `10` | How long the marker must be gone before `--profile` is loaded |
+| `--profile NAME` | none | OpenRGB profile loaded when the game exits and when the script stops |
+| `--process NAME…` | `Wow.exe` | Game process names to wait for |
+| `--always` | | Capture right away instead of waiting for the game; exit when capture stops |
 | `--fps N` | `10` | Checks per second |
 | `--source monitor\|window` | `monitor` | Capture a whole monitor or only the game window |
 | `--offset X Y` | `0 0` | Position of the game's top-left corner in the capture (windowed game on a captured monitor) |

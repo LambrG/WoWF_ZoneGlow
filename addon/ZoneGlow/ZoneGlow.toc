@@ -2,7 +2,7 @@
 ## Title: ZoneGlow
 ## Notes: Draws a pixel in the top-left corner colored by zone type (for RGB sync via OpenRGB)
 ## Author: Lambr
-## Version: 0.5
+## Version: 0.6
 ## SavedVariables: ZoneGlowDB
 
 ZoneGlow.lua

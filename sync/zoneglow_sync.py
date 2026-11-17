@@ -99,6 +99,7 @@ ZONE_TYPES = {
     "alliance": (0, 112, 222),
     "horde":    (204, 0, 0),
     "ironforge": (179, 89, 13),
+    "steppes":  (230, 69, 15),
     "default":  (0, 64, 255),
 }
 

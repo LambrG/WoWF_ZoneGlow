@@ -6,7 +6,7 @@
 [roles]
 Kingston = "secondary"
 
-# Zone sections: snow, forest, fel, plains, desert, alliance, ironforge, horde, default.
+# Zone sections: snow, forest, fel, plains, desert, steppes, alliance, ironforge, horde, default.
 # Value = role color "#RRGGBB". A role without a color gets the zone color from the addon.
 
 # Alliance cities: blue main (fans, keyboard), gold secondary (RAM)
